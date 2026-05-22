@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 
 // Capital inicial aproximado para tener liquidez (Cash)
-const INITIAL_PROFILE = { total_capital_allocated: 370000.00 };
+const INITIAL_PROFILE = { total_capital_allocated: 250000.00 };
 
 // Tu cartera real (PPP calculado según imagen)
 const INITIAL_TRANSACTIONS = [
@@ -199,4 +199,40 @@ export default function InvestmentDashboard() {
                   );
                 })}
                 <tr>
-                  <td style={{ padding:
+                  <td style={{ padding: '8px', fontWeight: 'bold', color: '#475569' }}>EFECTIVO (Cash)</td>
+                  <td style={{ padding: '8px' }}>${cashAvailable.toLocaleString('es-AR', {minimumFractionDigits:2})}</td>
+                  <td style={{ padding: '8px', fontWeight: 'bold', color: '#2563eb' }}>{((cashAvailable / totalAccountValue) * 100).toFixed(2)}%</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div style={{ display: 'table-cell', width: '50%', paddingLeft: '10px' }}>
+          <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', padding: '15px', minHeight: '200px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ marginTop: '0' }}>Consenso y Sentimiento de Analistas</h3>
+            <p style={{ fontSize: '9pt', color: '#64748b' }}>Información extraída automáticamente vía API.</p>
+            {activeAssets.map(asset => {
+              const live = marketData[asset.ticker] || { sentiment: 'Mantener' };
+              const isBuy = live.sentiment.includes('Compra');
+              return (
+                <div key={asset.ticker} style={{ padding: '10px 0', borderBottom: '1px solid #e2e8f0', display: 'table', width: '100%' }}>
+                  <div style={{ display: 'table-cell', fontWeight: 'bold', fontSize: '11pt' }}>{asset.ticker}</div>
+                  <div style={{ display: 'table-cell', textAlign: 'right' }}>
+                    <span style={{
+                      padding: '4px 10px', borderRadius: '20px', fontSize: '9pt', fontWeight: 'bold',
+                      backgroundColor: isBuy ? '#dcfce7' : '#f1f5f9',
+                      color: isBuy ? '#15803d' : '#475569'
+                    }}>
+                      {live.sentiment}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
