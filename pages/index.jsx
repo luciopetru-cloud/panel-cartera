@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Conexión a Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+// Conexión directa y fija a tu proyecto de Supabase
+const supabaseUrl = 'https://bfipevpjovznmasgzwlf.supabase.co';
+const supabaseKey = 'sb_publishable_-GQHzf4I7ZwG-RrhO159pw_lHZyK3iU';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const INITIAL_PROFILE = { total_capital_allocated: 361000.00 };
@@ -47,7 +47,7 @@ export default function InvestmentDashboard() {
     if (data && data.length > 0) {
       setTransactions(data);
     } else {
-      // Cartera por defecto si la base de datos está vacía
+      // Cartera por defecto reflejada si la tabla en la nube está completamente vacía
       setTransactions([
         { ticker: 'MELI', asset_type: 'STOCK', operation_type: 'BUY', quantity: 6.00, price: 1562.73 },
         { ticker: 'MSFT', asset_type: 'STOCK', operation_type: 'BUY', quantity: 69.00, price: 400.27 },
@@ -69,16 +69,21 @@ export default function InvestmentDashboard() {
       price: parseFloat(formPrice)
     };
 
-    // Intentamos guardar en la nube
+    // Envío del registro a la tabla remota
     const { error } = await supabase.from('transactions').insert([newTx]);
     
     if (error) {
-      // Si hay un error, te lo va a mostrar en una ventana emergente en el navegador
       alert("Error al GUARDAR en Supabase: " + error.message);
       return;
     }
 
-    // Si no hay error, actualizamos la pantalla de forma segura
+    if (!marketData[newTx.ticker]) {
+      setMarketData(prev => ({
+        ...prev,
+        [newTx.ticker]: { currentPrice: newTx.price, previousClose: newTx.price, dailyChangePercent: 0.0, sentiment: 'Mantener' }
+      }));
+    }
+
     setTransactions([...transactions, newTx]);
     setShowModal(false);
     setFormTicker('');
