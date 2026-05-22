@@ -242,6 +242,49 @@ export default function InvestmentDashboard() {
           </div>
         </div>
       </div>
+
+      {/* FORMULARIO MODAL DE NUEVA OPERACIÓN */}
+      {showModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ backgroundColor: 'white', padding: '25px', borderRadius: '8px', width: '400px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ marginTop: 0, color: '#0f172a' }}>Registrar Operación</h3>
+            <form onSubmit={handleAddTransaction}>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Ticker</label>
+                <input type="text" value={formTicker} onChange={e => setFormTicker(e.target.value)} required style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }} placeholder="Ej: AAPL" />
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Tipo de Activo</label>
+                <select value={formAssetType} onChange={e => setFormAssetType(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                  <option value="STOCK">Acción</option>
+                  <option value="ETF">ETF</option>
+                  <option value="CRYPTO">Criptomoneda</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Operación</label>
+                <select value={formType} onChange={e => setFormType(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
+                  <option value="BUY">Compra</option>
+                  <option value="SELL">Venta</option>
+                </select>
+              </div>
+              <div style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Cantidad (Nominales)</label>
+                <input type="number" step="0.0001" value={formQty} onChange={e => setFormQty(e.target.value)} required style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }} placeholder="0.00" />
+              </div>
+              <div style={{ marginBottom: '20px' }}>
+                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Precio de Ejecución ($)</label>
+                <input type="number" step="0.01" value={formPrice} onChange={e => setFormPrice(e.target.value)} required style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }} placeholder="0.00" />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button type="button" onClick={() => setShowModal(false)} style={{ padding: '8px 15px', border: 'none', backgroundColor: '#e2e8f0', color: '#0f172a', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>Cancelar</button>
+                <button type="submit" style={{ padding: '8px 15px', border: 'none', backgroundColor: '#1e3a8a', color: 'white', cursor: 'pointer', borderRadius: '4px', fontWeight: 'bold' }}>Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
