@@ -99,6 +99,15 @@ export default function InvestmentDashboard() {
 
   return (
     <div style={{ padding: '20px', backgroundColor: '#f1f5f9', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      
+      {/* TÍTULO Y MARCA DE TIEMPO */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '15px' }}>
+          <h2 style={{ margin: 0, color: '#0f172a' }}>Dashboard de Inversiones</h2>
+          <span style={{ fontSize: '9pt', color: '#64748b' }}>
+              Última actualización de cotizaciones: <strong>22 de mayo de 2026, 11:51 AM (ART)</strong>
+          </span>
+      </div>
+
       {/* HEADER DE CONTROL METRICAS */}
       <div style={{ display: 'table', width: '100%', backgroundColor: '#ffffff', padding: '15px', borderRadius: '8px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <div style={{ display: 'table-cell', width: '25%' }}>
