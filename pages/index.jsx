@@ -1,20 +1,14 @@
 "use client";
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
-// Capital inicial aproximado para tener liquidez (Cash)
+// Conexión segura a Supabase usando las variables de entorno de Vercel
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const INITIAL_PROFILE = { total_capital_allocated: 361000.00 };
 
-// Tu cartera real (PPP calculado según imagen)
-const INITIAL_TRANSACTIONS = [
-  { ticker: 'MELI', asset_type: 'STOCK', operation_type: 'BUY', quantity: 6.00, price: 1562.73 },
-  { ticker: 'MSFT', asset_type: 'STOCK', operation_type: 'BUY', quantity: 69.00, price: 400.27 },
-  { ticker: 'NFLX', asset_type: 'STOCK', operation_type: 'BUY', quantity: 113.00, price: 88.60 },
-  { ticker: 'NVDA', asset_type: 'STOCK', operation_type: 'BUY', quantity: 110.00, price: 182.98 },
-  { ticker: 'QQQ', asset_type: 'ETF', operation_type: 'BUY', quantity: 110.00, price: 670.70 },
-  { ticker: 'SPY', asset_type: 'ETF', operation_type: 'BUY', quantity: 135.00, price: 719.61 }
-];
-
-// Precios en vivo y variaciones exactas de tu captura
 const MARKET_DATA_MOCK = {
   'MELI': { currentPrice: 1654.16, previousClose: 1594.86, dailyChangePercent: 3.72, sentiment: 'Compra' },
   'MSFT': { currentPrice: 421.45, previousClose: 417.42, dailyChangePercent: 0.96, sentiment: 'Compra Fuerte' },
@@ -25,11 +19,15 @@ const MARKET_DATA_MOCK = {
 };
 
 export default function InvestmentDashboard() {
+  const [session, setSession] = useState(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+
   const [profile, setProfile] = useState(INITIAL_PROFILE);
-  const [transactions, setTransactions] = useState(INITIAL_TRANSACTIONS);
+  const [transactions, setTransactions] = useState([]);
   const [marketData, setMarketData] = useState(MARKET_DATA_MOCK);
 
-  // Estados para el formulario modal de Nueva Operación
   const [showModal, setShowModal] = useState(false);
   const [formTicker, setFormTicker] = useState('');
   const [formType, setFormType] = useState('BUY');
@@ -37,7 +35,74 @@ export default function InvestmentDashboard() {
   const [formQty, setFormQty] = useState('');
   const [formPrice, setFormPrice] = useState('');
 
-  // 1. Calcular Consolidación de Cartera (Agrupación por Ticker)
+  // 1. Efecto de Autenticación y Carga de Datos
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchTransactions();
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session) fetchTransactions();
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // 2. Función para consultar la Base de Datos
+  const fetchTransactions = async () => {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('executed_at', { ascending: true });
+    
+    if (data) setTransactions(data);
+    if (error) console.error("Error al cargar datos:", error);
+  };
+
+  // 3. Manejo de Inicio de Sesión
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) setAuthError('Credenciales incorrectas. Verificá tu email y contraseña.');
+  };
+
+  // 4. Guardar Nueva Operación en la Base de Datos
+  const handleAddTransaction = async (e) => {
+    e.preventDefault();
+    const newTx = {
+      ticker: formTicker.toUpperCase(),
+      asset_type: formAssetType,
+      operation_type: formType,
+      quantity: parseFloat(formQty),
+      price: parseFloat(formPrice)
+    };
+
+    const { data, error } = await supabase.from('transactions').insert([newTx]).select();
+
+    if (error) {
+      alert("Error al guardar la operación en la base de datos.");
+      console.error(error);
+      return;
+    }
+
+    if (!marketData[newTx.ticker]) {
+      setMarketData(prev => ({
+        ...prev,
+        [newTx.ticker]: { currentPrice: newTx.price, previousClose: newTx.price, dailyChangePercent: 0.0, sentiment: 'Mantener' }
+      }));
+    }
+
+    setTransactions([...transactions, data[0]]);
+    setShowModal(false);
+    setFormTicker('');
+    setFormQty('');
+    setFormPrice('');
+  };
+
+  // ---------------- LÓGICA DE CONSOLIDACIÓN ----------------
   const portfolioSummary = {};
   let totalCashSpentAndReceived = 0;
 
@@ -59,13 +124,9 @@ export default function InvestmentDashboard() {
     }
   });
 
-  // Filtrar activos liquidados por completo
   const activeAssets = Object.values(portfolioSummary).filter(asset => asset.totalQty > 0);
-
-  // Calcular Dinero Disponible Líquido (Cash)
   const cashAvailable = profile.total_capital_allocated - totalCashSpentAndReceived;
 
-  // Calcular totales de cartera para gráficos y resúmenes
   let currentPortfolioMarketValue = 0;
   activeAssets.forEach(asset => {
     const live = marketData[asset.ticker] || { currentPrice: asset.totalCost / asset.totalQty };
@@ -73,39 +134,37 @@ export default function InvestmentDashboard() {
   });
   const totalAccountValue = currentPortfolioMarketValue + cashAvailable;
 
-  const handleAddTransaction = (e) => {
-    e.preventDefault();
-    const newTx = {
-      ticker: formTicker.toUpperCase(),
-      asset_type: formAssetType,
-      operation_type: formType,
-      quantity: parseFloat(formQty),
-      price: parseFloat(formPrice)
-    };
+  // ---------------- PANTALLA DE LOGIN ----------------
+  if (!session) {
+    return (
+      <div style={{ display: 'flex', minHeight: '100vh', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f1f5f9', fontFamily: 'sans-serif' }}>
+        <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '8px', width: '100%', maxWidth: '350px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+          <h2 style={{ color: '#0f172a', textAlign: 'center', marginTop: 0 }}>Acceso Seguro</h2>
+          <p style={{ fontSize: '9pt', color: '#64748b', textAlign: 'center', marginBottom: '20px' }}>Ingresá a tu Dashboard de Inversiones</p>
+          <form onSubmit={handleLogin}>
+            <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+            <input type="password" placeholder="Contraseña" value={password} onChange={(e) => setPassword(e.target.value)} required style={{ width: '100%', padding: '10px', marginBottom: '15px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }} />
+            {authError && <div style={{ color: '#dc2626', fontSize: '9pt', marginBottom: '10px', textAlign: 'center' }}>{authError}</div>}
+            <button type="submit" style={{ width: '100%', padding: '10px', backgroundColor: '#1e3a8a', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', cursor: 'pointer' }}>Ingresar</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
-    if (!marketData[newTx.ticker]) {
-      setMarketData(prev => ({
-        ...prev,
-        [newTx.ticker]: { currentPrice: newTx.price, previousClose: newTx.price, dailyChangePercent: 0.0, sentiment: 'Mantener' }
-      }));
-    }
-
-    setTransactions([...transactions, newTx]);
-    setShowModal(false);
-    setFormTicker('');
-    setFormQty('');
-    setFormPrice('');
-  };
-
+  // ---------------- PANTALLA DEL DASHBOARD ----------------
   return (
     <div style={{ padding: '20px', backgroundColor: '#f1f5f9', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       
       {/* TÍTULO Y MARCA DE TIEMPO */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '15px' }}>
           <h2 style={{ margin: 0, color: '#0f172a' }}>Dashboard de Inversiones</h2>
-          <span style={{ fontSize: '9pt', color: '#64748b' }}>
-              Última actualización de cotizaciones: <strong>22 de mayo de 2026, 11:51 AM (ART)</strong>
-          </span>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '9pt', color: '#64748b', marginBottom: '4px' }}>
+                Última actualización de cotizaciones: <strong>22 de mayo de 2026, 11:51 AM (ART)</strong>
+            </div>
+            <button onClick={() => supabase.auth.signOut()} style={{ fontSize: '9pt', color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Cerrar Sesión</button>
+          </div>
       </div>
 
       {/* HEADER DE CONTROL METRICAS */}
@@ -132,53 +191,57 @@ export default function InvestmentDashboard() {
       {/* TABLA PRINCIPAL DE INVERSIONES */}
       <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', padding: '15px', marginBottom: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
         <h3 style={{ marginTop: '0', marginBottom: '15px', color: '#0f172a' }}>Monitoreo de Activos Unificados (Precio Promedio Ponderado)</h3>
-        <table style={{ width: '100%', fontSize: '10pt', textAlign: 'left', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
-              <th style={{ padding: '10px' }}>Ticker</th>
-              <th style={{ padding: '10px' }}>Tipo</th>
-              <th style={{ padding: '10px' }}>Nominales</th>
-              <th style={{ padding: '10px' }}>Precio Compra (PPP)</th>
-              <th style={{ padding: '10px' }}>Precio Actual</th>
-              <th style={{ padding: '10px' }}>Var. Día (%)</th>
-              <th style={{ padding: '10px' }}>Ganancia Día ($)</th>
-              <th style={{ padding: '10px' }}>Var. Acum (%)</th>
-              <th style={{ padding: '10px' }}>Ganancia Acum ($)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activeAssets.map(asset => {
-              const ppp = asset.totalCost / asset.totalQty;
-              const live = marketData[asset.ticker] || { currentPrice: ppp, previousClose: ppp, dailyChangePercent: 0, sentiment: 'N/A' };
-              
-              const dailyGainMonetary = asset.totalQty * (live.currentPrice - live.previousClose);
-              const totalGainPercent = ((live.currentPrice - ppp) / ppp) * 100;
-              const totalGainMonetary = asset.totalQty * (live.currentPrice - ppp);
+        {activeAssets.length === 0 ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#64748b' }}>Aún no hay operaciones registradas. Usá el botón para cargar tus activos.</div>
+        ) : (
+          <table style={{ width: '100%', fontSize: '10pt', textAlign: 'left', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#0f172a', color: '#ffffff' }}>
+                <th style={{ padding: '10px' }}>Ticker</th>
+                <th style={{ padding: '10px' }}>Tipo</th>
+                <th style={{ padding: '10px' }}>Nominales</th>
+                <th style={{ padding: '10px' }}>Precio Compra (PPP)</th>
+                <th style={{ padding: '10px' }}>Precio Actual</th>
+                <th style={{ padding: '10px' }}>Var. Día (%)</th>
+                <th style={{ padding: '10px' }}>Ganancia Día ($)</th>
+                <th style={{ padding: '10px' }}>Var. Acum (%)</th>
+                <th style={{ padding: '10px' }}>Ganancia Acum ($)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeAssets.map(asset => {
+                const ppp = asset.totalCost / asset.totalQty;
+                const live = marketData[asset.ticker] || { currentPrice: ppp, previousClose: ppp, dailyChangePercent: 0, sentiment: 'N/A' };
+                
+                const dailyGainMonetary = asset.totalQty * (live.currentPrice - live.previousClose);
+                const totalGainPercent = ((live.currentPrice - ppp) / ppp) * 100;
+                const totalGainMonetary = asset.totalQty * (live.currentPrice - ppp);
 
-              return (
-                <tr key={asset.ticker} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                  <td style={{ padding: '10px', fontWeight: 'bold' }}>{asset.ticker}</td>
-                  <td style={{ padding: '10px' }}><span style={{ fontSize: '8.5pt', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>{asset.type}</span></td>
-                  <td style={{ padding: '10px' }}>{asset.totalQty.toFixed(2)}</td>
-                  <td style={{ padding: '10px' }}>${ppp.toFixed(2)}</td>
-                  <td style={{ padding: '10px', fontWeight: '500' }}>${live.currentPrice.toFixed(2)}</td>
-                  <td style={{ padding: '10px', color: live.dailyChangePercent >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                    {live.dailyChangePercent >= 0 ? '+' : ''}{live.dailyChangePercent.toFixed(2)}%
-                  </td>
-                  <td style={{ padding: '10px', color: dailyGainMonetary >= 0 ? '#16a34a' : '#dc2626' }}>
-                    ${dailyGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}
-                  </td>
-                  <td style={{ padding: '10px', color: totalGainPercent >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                    {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%
-                  </td>
-                  <td style={{ padding: '10px', color: totalGainMonetary >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                    ${totalGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                return (
+                  <tr key={asset.ticker} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                    <td style={{ padding: '10px', fontWeight: 'bold' }}>{asset.ticker}</td>
+                    <td style={{ padding: '10px' }}><span style={{ fontSize: '8.5pt', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>{asset.type}</span></td>
+                    <td style={{ padding: '10px' }}>{asset.totalQty.toFixed(2)}</td>
+                    <td style={{ padding: '10px' }}>${ppp.toFixed(2)}</td>
+                    <td style={{ padding: '10px', fontWeight: '500' }}>${live.currentPrice.toFixed(2)}</td>
+                    <td style={{ padding: '10px', color: live.dailyChangePercent >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
+                      {live.dailyChangePercent >= 0 ? '+' : ''}{live.dailyChangePercent.toFixed(2)}%
+                    </td>
+                    <td style={{ padding: '10px', color: dailyGainMonetary >= 0 ? '#16a34a' : '#dc2626' }}>
+                      ${dailyGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}
+                    </td>
+                    <td style={{ padding: '10px', color: totalGainPercent >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
+                      {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%
+                    </td>
+                    <td style={{ padding: '10px', color: totalGainMonetary >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
+                      ${totalGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {/* VISTA SECUNDARIA: DISTRIBUCIÓN Y SENTIMIENTO DE MERCADO */}
@@ -284,7 +347,6 @@ export default function InvestmentDashboard() {
           </div>
         </div>
       )}
-
     </div>
   );
 }
