@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 
 // Capital inicial aproximado para tener liquidez (Cash)
-const INITIAL_PROFILE = { total_capital_allocated: 250000.00 };
+const INITIAL_PROFILE = { total_capital_allocated: 374000.00 };
 
 // Tu cartera real (PPP calculado según imagen)
 const INITIAL_TRANSACTIONS = [
