@@ -40,11 +40,14 @@ export default function InvestmentDashboard() {
       .select('*')
       .order('executed_at', { ascending: true });
     
-    // Si la base de datos devuelve datos, los usamos. 
-    // Si da error por seguridad (RLS) o está vacía, cargamos tu cartera por defecto para que puedas probar la interfaz.
+    if (error) {
+      alert("Error al LEER de la base de datos: " + error.message);
+    }
+
     if (data && data.length > 0) {
       setTransactions(data);
     } else {
+      // Cartera por defecto si la base de datos está vacía
       setTransactions([
         { ticker: 'MELI', asset_type: 'STOCK', operation_type: 'BUY', quantity: 6.00, price: 1562.73 },
         { ticker: 'MSFT', asset_type: 'STOCK', operation_type: 'BUY', quantity: 69.00, price: 400.27 },
@@ -66,25 +69,23 @@ export default function InvestmentDashboard() {
       price: parseFloat(formPrice)
     };
 
-    // Intentamos guardar en la nube (fallará silenciosamente si RLS está activo sin sesión)
+    // Intentamos guardar en la nube
     const { error } = await supabase.from('transactions').insert([newTx]);
     
     if (error) {
-      console.log("No se pudo guardar en la nube por políticas RLS. Se guarda en memoria temporal.");
+      // Si hay un error, te lo va a mostrar en una ventana emergente en el navegador
+      alert("Error al GUARDAR en Supabase: " + error.message);
+      return;
     }
 
-    if (!marketData[newTx.ticker]) {
-      setMarketData(prev => ({
-        ...prev,
-        [newTx.ticker]: { currentPrice: newTx.price, previousClose: newTx.price, dailyChangePercent: 0.0, sentiment: 'Mantener' }
-      }));
-    }
-
+    // Si no hay error, actualizamos la pantalla de forma segura
     setTransactions([...transactions, newTx]);
     setShowModal(false);
     setFormTicker('');
     setFormQty('');
     setFormPrice('');
+    
+    alert("¡Operación guardada con éxito en la nube!");
   };
 
   const portfolioSummary = {};
