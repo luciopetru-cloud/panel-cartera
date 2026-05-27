@@ -22,6 +22,9 @@ export default function InvestmentDashboard() {
   const [profile, setProfile] = useState(INITIAL_PROFILE);
   const [transactions, setTransactions] = useState([]);
   const [marketData, setMarketData] = useState(MARKET_DATA_MOCK);
+  
+  // Nuevo estado para guardar la fecha y hora reales
+  const [lastUpdated, setLastUpdated] = useState('Cargando...');
 
   const [showModal, setShowModal] = useState(false);
   const [formTicker, setFormTicker] = useState('');
@@ -32,6 +35,12 @@ export default function InvestmentDashboard() {
 
   useEffect(() => {
     fetchTransactions();
+    
+    // Generar la fecha y hora actual automáticamente al cargar la página
+    const now = new Date();
+    const fechaFormateada = now.toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' });
+    const horaFormateada = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    setLastUpdated(`${fechaFormateada}, ${horaFormateada} (ART)`);
   }, []);
 
   const fetchTransactions = async () => {
@@ -47,7 +56,6 @@ export default function InvestmentDashboard() {
     if (data && data.length > 0) {
       setTransactions(data);
     } else {
-      // Cartera por defecto reflejada si la tabla en la nube está completamente vacía
       setTransactions([
         { ticker: 'MELI', asset_type: 'STOCK', operation_type: 'BUY', quantity: 6.00, price: 1562.73 },
         { ticker: 'MSFT', asset_type: 'STOCK', operation_type: 'BUY', quantity: 69.00, price: 400.27 },
@@ -69,7 +77,6 @@ export default function InvestmentDashboard() {
       price: parseFloat(formPrice)
     };
 
-    // Envío del registro a la tabla remota
     const { error } = await supabase.from('transactions').insert([newTx]);
     
     if (error) {
@@ -130,7 +137,7 @@ export default function InvestmentDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '15px' }}>
           <h2 style={{ margin: 0, color: '#0f172a' }}>Dashboard de Inversiones</h2>
           <span style={{ fontSize: '9pt', color: '#64748b' }}>
-              Última actualización de cotizaciones: <strong>22 de mayo de 2026, 11:51 AM (ART)</strong>
+              Última actualización de cotizaciones: <strong>{lastUpdated}</strong>
           </span>
       </div>
 
