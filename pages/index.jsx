@@ -2,29 +2,18 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-// Conexión directa y fija a tu proyecto de Supabase
+// Conexión directa a Supabase
 const supabaseUrl = 'https://bfipevpjovznmasgzwlf.supabase.co';
 const supabaseKey = 'sb_publishable_-GQHzf4I7ZwG-RrhO159pw_lHZyK3iU';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 const INITIAL_PROFILE = { total_capital_allocated: 361000.00 };
 
-const MARKET_DATA_MOCK = {
-  'MELI': { currentPrice: 1654.16, previousClose: 1594.86, dailyChangePercent: 3.72, sentiment: 'Compra' },
-  'MSFT': { currentPrice: 421.45, previousClose: 417.42, dailyChangePercent: 0.96, sentiment: 'Compra Fuerte' },
-  'NFLX': { currentPrice: 88.25, previousClose: 89.34, dailyChangePercent: -1.21, sentiment: 'Mantener' },
-  'NVDA': { currentPrice: 223.36, previousClose: 220.61, dailyChangePercent: 1.25, sentiment: 'Compra Fuerte' },
-  'QQQ': { currentPrice: 711.99, previousClose: 701.53, dailyChangePercent: 1.49, sentiment: 'Compra' },
-  'SPY': { currentPrice: 740.70, previousClose: 733.73, dailyChangePercent: 0.95, sentiment: 'Compra' }
-};
-
 export default function InvestmentDashboard() {
   const [profile, setProfile] = useState(INITIAL_PROFILE);
   const [transactions, setTransactions] = useState([]);
-  const [marketData, setMarketData] = useState(MARKET_DATA_MOCK);
-  
-  // Nuevo estado para guardar la fecha y hora reales
-  const [lastUpdated, setLastUpdated] = useState('Cargando...');
+  const [marketData, setMarketData] = useState({});
+  const [lastUpdated, setLastUpdated] = useState('Cargando cotizaciones...');
 
   const [showModal, setShowModal] = useState(false);
   const [formTicker, setFormTicker] = useState('');
@@ -35,13 +24,32 @@ export default function InvestmentDashboard() {
 
   useEffect(() => {
     fetchTransactions();
-    
-    // Generar la fecha y hora actual automáticamente al cargar la página
-    const now = new Date();
-    const fechaFormateada = now.toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' });
-    const horaFormateada = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
-    setLastUpdated(`${fechaFormateada}, ${horaFormateada} (ART)`);
   }, []);
+
+  // Función para buscar precios en vivo de tu API
+  const fetchLivePrices = async (txs) => {
+    const uniqueTickers = [...new Set(txs.map(t => t.ticker))];
+    const newMarketData = {};
+
+    await Promise.all(uniqueTickers.map(async (ticker) => {
+      try {
+        // RUTA ABSOLUTA CORREGIDA: Apunta directo a tu puente en Vercel
+        const res = await fetch(`https://panel-cartera.vercel.app/api/cotizaciones?ticker=${ticker}`);
+        const data = await res.json();
+        
+        if (data.currentPrice) {
+          newMarketData[ticker] = data;
+        }
+      } catch (e) {
+        console.error(`Error obteniendo precio de ${ticker}`, e);
+      }
+    }));
+
+    setMarketData(newMarketData);
+    
+    const now = new Date();
+    setLastUpdated(`${now.toLocaleDateString('es-AR', { year: 'numeric', month: 'long', day: 'numeric' })}, ${now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })} (ART)`);
+  };
 
   const fetchTransactions = async () => {
     const { data, error } = await supabase
@@ -49,22 +57,24 @@ export default function InvestmentDashboard() {
       .select('*')
       .order('executed_at', { ascending: true });
     
-    if (error) {
-      alert("Error al LEER de la base de datos: " + error.message);
-    }
+    if (error) alert("Error al leer Supabase: " + error.message);
 
+    let currentTxs = [];
     if (data && data.length > 0) {
-      setTransactions(data);
+      currentTxs = data;
     } else {
-      setTransactions([
+      currentTxs = [
         { ticker: 'MELI', asset_type: 'STOCK', operation_type: 'BUY', quantity: 6.00, price: 1562.73 },
         { ticker: 'MSFT', asset_type: 'STOCK', operation_type: 'BUY', quantity: 69.00, price: 400.27 },
         { ticker: 'NFLX', asset_type: 'STOCK', operation_type: 'BUY', quantity: 113.00, price: 88.60 },
         { ticker: 'NVDA', asset_type: 'STOCK', operation_type: 'BUY', quantity: 110.00, price: 182.98 },
         { ticker: 'QQQ', asset_type: 'ETF', operation_type: 'BUY', quantity: 110.00, price: 670.70 },
         { ticker: 'SPY', asset_type: 'ETF', operation_type: 'BUY', quantity: 135.00, price: 719.61 }
-      ]);
+      ];
     }
+    
+    setTransactions(currentTxs);
+    fetchLivePrices(currentTxs); 
   };
 
   const handleAddTransaction = async (e) => {
@@ -78,17 +88,19 @@ export default function InvestmentDashboard() {
     };
 
     const { error } = await supabase.from('transactions').insert([newTx]);
-    
     if (error) {
-      alert("Error al GUARDAR en Supabase: " + error.message);
+      alert("Error al GUARDAR: " + error.message);
       return;
     }
 
     if (!marketData[newTx.ticker]) {
-      setMarketData(prev => ({
-        ...prev,
-        [newTx.ticker]: { currentPrice: newTx.price, previousClose: newTx.price, dailyChangePercent: 0.0, sentiment: 'Mantener' }
-      }));
+      try {
+        const res = await fetch(`https://panel-cartera.vercel.app/api/cotizaciones?ticker=${newTx.ticker}`);
+        const data = await res.json();
+        if (data.currentPrice) {
+          setMarketData(prev => ({ ...prev, [newTx.ticker]: data }));
+        }
+      } catch (e) {}
     }
 
     setTransactions([...transactions, newTx]);
@@ -96,8 +108,6 @@ export default function InvestmentDashboard() {
     setFormTicker('');
     setFormQty('');
     setFormPrice('');
-    
-    alert("¡Operación guardada con éxito en la nube!");
   };
 
   const portfolioSummary = {};
@@ -126,7 +136,8 @@ export default function InvestmentDashboard() {
 
   let currentPortfolioMarketValue = 0;
   activeAssets.forEach(asset => {
-    const live = marketData[asset.ticker] || { currentPrice: asset.totalCost / asset.totalQty };
+    const ppp = asset.totalCost / asset.totalQty;
+    const live = marketData[asset.ticker] || { currentPrice: ppp }; 
     currentPortfolioMarketValue += asset.totalQty * live.currentPrice;
   });
   const totalAccountValue = currentPortfolioMarketValue + cashAvailable;
@@ -137,7 +148,7 @@ export default function InvestmentDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '15px' }}>
           <h2 style={{ margin: 0, color: '#0f172a' }}>Dashboard de Inversiones</h2>
           <span style={{ fontSize: '9pt', color: '#64748b' }}>
-              Última actualización de cotizaciones: <strong>{lastUpdated}</strong>
+              Última actualización: <strong>{lastUpdated}</strong>
           </span>
       </div>
 
@@ -180,7 +191,7 @@ export default function InvestmentDashboard() {
           <tbody>
             {activeAssets.map(asset => {
               const ppp = asset.totalCost / asset.totalQty;
-              const live = marketData[asset.ticker] || { currentPrice: ppp, previousClose: ppp, dailyChangePercent: 0, sentiment: 'N/A' };
+              const live = marketData[asset.ticker] || { currentPrice: ppp, previousClose: ppp, dailyChangePercent: 0, sentiment: 'Cargando...' };
               
               const dailyGainMonetary = asset.totalQty * (live.currentPrice - live.previousClose);
               const totalGainPercent = ((live.currentPrice - ppp) / ppp) * 100;
@@ -192,18 +203,20 @@ export default function InvestmentDashboard() {
                   <td style={{ padding: '10px' }}><span style={{ fontSize: '8.5pt', backgroundColor: '#e2e8f0', padding: '2px 6px', borderRadius: '4px' }}>{asset.type}</span></td>
                   <td style={{ padding: '10px' }}>{asset.totalQty.toFixed(2)}</td>
                   <td style={{ padding: '10px' }}>${ppp.toFixed(2)}</td>
-                  <td style={{ padding: '10px', fontWeight: '500' }}>${live.currentPrice.toFixed(2)}</td>
+                  <td style={{ padding: '10px', fontWeight: '500' }}>
+                    {marketData[asset.ticker] ? `$${live.currentPrice.toFixed(2)}` : '...'}
+                  </td>
                   <td style={{ padding: '10px', color: live.dailyChangePercent >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                    {live.dailyChangePercent >= 0 ? '+' : ''}{live.dailyChangePercent.toFixed(2)}%
+                    {marketData[asset.ticker] ? `${live.dailyChangePercent >= 0 ? '+' : ''}${live.dailyChangePercent.toFixed(2)}%` : '-'}
                   </td>
                   <td style={{ padding: '10px', color: dailyGainMonetary >= 0 ? '#16a34a' : '#dc2626' }}>
-                    ${dailyGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}
+                    {marketData[asset.ticker] ? `$${dailyGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}` : '-'}
                   </td>
                   <td style={{ padding: '10px', color: totalGainPercent >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                    {totalGainPercent >= 0 ? '+' : ''}{totalGainPercent.toFixed(2)}%
+                    {marketData[asset.ticker] ? `${totalGainPercent >= 0 ? '+' : ''}${totalGainPercent.toFixed(2)}%` : '-'}
                   </td>
                   <td style={{ padding: '10px', color: totalGainMonetary >= 0 ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>
-                    ${totalGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}
+                    {marketData[asset.ticker] ? `$${totalGainMonetary.toLocaleString('es-AR', {minimumFractionDigits:2})}` : '-'}
                   </td>
                 </tr>
               );
@@ -249,19 +262,21 @@ export default function InvestmentDashboard() {
 
         <div style={{ display: 'table-cell', width: '50%', paddingLeft: '10px' }}>
           <div style={{ backgroundColor: '#ffffff', borderRadius: '8px', padding: '15px', minHeight: '200px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-            <h3 style={{ marginTop: '0' }}>Consenso y Sentimiento de Analistas</h3>
-            <p style={{ fontSize: '9pt', color: '#64748b' }}>Información extraída automáticamente vía API.</p>
+            <h3 style={{ marginTop: '0' }}>Consenso y Sentimiento de Mercado</h3>
+            <p style={{ fontSize: '9pt', color: '#64748b' }}>Basado en el rendimiento diario de Yahoo Finance.</p>
             {activeAssets.map(asset => {
-              const live = marketData[asset.ticker] || { sentiment: 'Mantener' };
+              const live = marketData[asset.ticker] || { sentiment: 'Cargando...' };
               const isBuy = live.sentiment.includes('Compra');
+              const isPending = live.sentiment === 'Cargando...';
+              
               return (
                 <div key={asset.ticker} style={{ padding: '10px 0', borderBottom: '1px solid #e2e8f0', display: 'table', width: '100%' }}>
                   <div style={{ display: 'table-cell', fontWeight: 'bold', fontSize: '11pt' }}>{asset.ticker}</div>
                   <div style={{ display: 'table-cell', textAlign: 'right' }}>
                     <span style={{
                       padding: '4px 10px', borderRadius: '20px', fontSize: '9pt', fontWeight: 'bold',
-                      backgroundColor: isBuy ? '#dcfce7' : '#f1f5f9',
-                      color: isBuy ? '#15803d' : '#475569'
+                      backgroundColor: isPending ? '#e2e8f0' : (isBuy ? '#dcfce7' : '#f1f5f9'),
+                      color: isPending ? '#64748b' : (isBuy ? '#15803d' : '#475569')
                     }}>
                       {live.sentiment}
                     </span>
@@ -279,15 +294,14 @@ export default function InvestmentDashboard() {
             <h3 style={{ marginTop: 0, color: '#0f172a' }}>Registrar Operación</h3>
             <form onSubmit={handleAddTransaction}>
               <div style={{ marginBottom: '12px' }}>
-                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Ticker</label>
+                <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Ticker (Símbolo en Yahoo Finance)</label>
                 <input type="text" value={formTicker} onChange={e => setFormTicker(e.target.value)} required style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }} placeholder="Ej: AAPL" />
               </div>
               <div style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', fontSize: '9pt', marginBottom: '5px', color: '#475569' }}>Tipo de Activo</label>
                 <select value={formAssetType} onChange={e => setFormAssetType(e.target.value)} style={{ width: '100%', padding: '8px', boxSizing: 'border-box', border: '1px solid #cbd5e1', borderRadius: '4px' }}>
-                  <option value="STOCK">Acción</option>
+                  <option value="STOCK">Acción / CEDEAR</option>
                   <option value="ETF">ETF</option>
-                  <option value="CRYPTO">Criptomoneda</option>
                 </select>
               </div>
               <div style={{ marginBottom: '12px' }}>
